@@ -26,21 +26,27 @@ class ALS:
         # Initialize objective value:
         self.J = []
         # Initialize reference timescales:
-        self.ts = np.zeros(self.M)
-    def UpdateTS(self,tsnew):
+        self.ts = np.zeros(self.M-1)
+    def UpdateTS(self,ts,ev=False):
         ''' Set reference implied timescales to a new value.
         
         Parameters:
         -------------
-        tsnew: ndarray, shape(self.M,), new implied timescales.
+        ts: ndarray, shape(self.M,), the new timescales (or eigenvalues).
+        ev: If True, then ts is understood as an array of eigenvalues and con-
+            verted before updating.
         '''
-        self.ts = tsnew
+        # Compute implied timescales if needed:
+        if ev:
+            ts = -self.tau/np.log(ts[1:])
+        # Update if necessary:
+        self.ts = np.maximum(self.ts,ts)
     def RefTS(self):
         ''' Returns
         ------------
         self.ts, ndarray, shape(self.M,), the array of reference timescales.
         '''
-        return self.M
+        return self.ts
     def UpdateObjective(self,Jnew):
         ''' Update objective function value.
         
