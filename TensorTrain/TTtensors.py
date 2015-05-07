@@ -157,5 +157,5 @@ class BlockTTtensor:
                 interface_list.append(Yk)
             else:
                 Yk = Ut.DoubleProducts(Fk,Yk,self.tensordir+"Interface%d"%k,Uk.transpose())
-                interface_list.insert(Yk,-1)
+                interface_list.insert(-1,Yk)
         return interface_list

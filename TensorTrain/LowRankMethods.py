@@ -6,7 +6,7 @@ import functools as ft
 
 import TensorTrain.LowRank as TLR
 
-def LowRank(self,eigv,dims,A):
+def LowRank(eigv,dims,A):
     ''' Computes optimal low-rank decomposition of the full solution for the
     subproblem in ALS.
     
@@ -23,7 +23,7 @@ def LowRank(self,eigv,dims,A):
         composition. If None is returned, the optimization failed.
     '''
     # Define a threshold for orthogonality of solutions, remains hard-coded here:
-    eps_sol = 1e-10
+    eps_sol = 1e-14
     # Extract the current eigenvector array:
     Up = eigv.eigenvectors
     # Get the correlation matrices:
@@ -35,33 +35,32 @@ def LowRank(self,eigv,dims,A):
     Wk = np.dot(np.diag(sk),Wk)
     # Start adaptive rank selection:
     rnew = 1
-    while rnew < rfull:
+    while rnew <= rfull:
         # Select only the first rnew singular values:
         U0 = Uk[:,:rnew]
         U1 = Wk[:rnew,:].transpose()
         # Create a low-rank object for this decomposition:
-        LR0 = TLR.LowRank(U0,U1,dims,Ctau,C0)
+        LR = TLR.LowRank(U0,U1,dims,Ctau,C0)
         # If orthogonality constraints are not violated, accept:
-        if np.max(LR0.Orthogonality()) < eps_sol:
+        if (np.max(np.abs(LR.Orthogonality())) < eps_sol):
             print "Solutions are orthonormal."
+            break
         # Otherwise, attempt optimization:
         else:
             print "Attempting Optimization."
-            LR = Optimize(LR0,A.eps_orth,A.mu0)
-        # Check acceptance criteria:
-        # First, check if optimization failed entirely:
-        if LR == None:
-            print "Optimization failed."
-            LR = LR0
-            rnew += 1
-        else:
-            # Get the timescales and check:
-            ts = LR.Timescales(A.tau)
-            if np.all(ts >= A.eps_rank*A.RefTS()):
-                break
-            else:
-                LR = LR0
+            LR = Optimize(LR,A.eps_orth,A.mu0)
+            # Check acceptance criteria:
+            # First, check if optimization failed entirely:
+            if LR == None:
+                print "Optimization failed."
                 rnew += 1
+            else:
+                # Get the timescales and check:
+                ts = LR.Timescales(A.tau)
+                if np.all(ts >= A.eps_rank*A.RefTS()):
+                    break
+                else:
+                    rnew += 1
     print "Rank modified to %d"%rnew
     print ""
     return LR

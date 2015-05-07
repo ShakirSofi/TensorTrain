@@ -95,7 +95,7 @@ class LowRank:
         # Solve generalized eigenvalue problem:
         D,_ = pla.eig_corr(C0,Ct)
         # Compute timescales:
-        return -self.tau/np.log(D[1:])
+        return -tau/np.log(D[1:])
     def Objective(self):
         ''' Compute the (unconstrained) objective function (eigenvalue trace)
         for the current components.
@@ -106,7 +106,7 @@ class LowRank:
         '''
         L = -0.5*np.trace(np.dot(self.U.transpose(),np.dot(self.Ctau,self.U)))
         return L
-    def ContrainedObjective(self,mu):
+    def ConstrainedObjective(self,mu):
         ''' Compute the constrained objective function (eigenvalue trace + qua-
         dratic penalty terms) for the current components.
         
@@ -207,7 +207,7 @@ class LowRank:
         # First dimension:
         E = np.eye(self.n0,self.n0)
         for r in range(self.R):
-            vr = self.U1[r,:]
+            vr = self.U1[:,r]
             for k in range(self.n0):
                 ekr = np.outer(E[k,:],vr)
                 DU[:,r*self.n0+k] = np.reshape(ekr,(self.n0*self.n1,))
@@ -215,7 +215,7 @@ class LowRank:
         offset = self.R*self.n0
         E = np.eye(self.n1,self.n1)
         for r in range(self.R):
-            vr = self.U0[r,:]
+            vr = self.U0[:,r]
             for k in range(self.n1):
                 ekr = np.outer(vr,E[k,:])
                 DU[:,offset+r*self.n1+k] = np.reshape(ekr,(self.n0*self.n1,))

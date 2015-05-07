@@ -32,8 +32,8 @@ def ApplyLinearTransform(Y,U,filename):
         piece = piece[1]
         # Check if the last trajectory is finished:
         if traj_id > q:
-            np.save(filename + "%d.npy"%q,ieval)
-            file_names.append(filename + "%d.npy"%q)
+            np.save(filename + "_%d.npy"%q,ieval)
+            file_names.append(filename + "_%d.npy"%q)
             ieval = np.zeros((0,r))
             q += 1
         # Apply linear transform:
@@ -41,8 +41,8 @@ def ApplyLinearTransform(Y,U,filename):
         # Stack the result underneath the previous results:
         ieval = np.vstack((ieval,piece))
     # Save the last trajectory:
-    np.save(filename + "%d.npy"%q,ieval)
-    file_names.append(filename + "%d.npy"%q)
+    np.save(filename + "_%d.npy"%q,ieval)
+    file_names.append(filename + "_%d.npy"%q)
     # Build a new reader and return it:
     reader = pco.source(file_names)
     reader.chunksize = Y.chunksize
@@ -68,13 +68,18 @@ def DoubleProducts(Y1,Y2,filename,U=None):
     r2 = Y2.dimension()
     # Compute the product dimension:
     r = r1*r2
+    # Get the output dimension:
+    if not (U is None):
+        ro = U.shape[1]
+    else:
+        ro = r
     # Get the iterators for both time-series:
     I1 = Y1.iterator()
     I2 = Y2.iterator()
     # Prepare an empty array for the trajectory pieces:
     file_names = []
     q = 0
-    ieval = np.zeros((0,r))
+    ieval = np.zeros((0,ro))
     # Compute the products chunk by chunk:
     for piece in zip(I1,I2):
         # Get the trajectory number and the data:
@@ -83,21 +88,21 @@ def DoubleProducts(Y1,Y2,filename,U=None):
         piece1 = piece[1][1]
         # Check if the last trajectory is finished:
         if traj_id > q:
-            np.save(filename + "%d.npy"%q,ieval)
-            file_names.append(filename + "%d.npy"%q)
-            ieval = np.zeros((0,r))
+            np.save(filename + "_%d.npy"%q,ieval)
+            file_names.append(filename + "_%d.npy"%q)
+            ieval = np.zeros((0,ro))
             q += 1
         # Compute all the products:
         chunkeval = np.einsum('ijk,imk->ijm',piece0[:,:,np.newaxis],piece1[:,:,np.newaxis])
         chunkeval = np.reshape(chunkeval,(chunkeval.shape[0],r))
         # Apply linear transform if necessary:
-        if not U==None:
+        if not (U is None):
             chunkeval = np.dot(chunkeval,U)
         # Stack the result underneath the previous results:
         ieval = np.vstack((ieval,chunkeval))
     # Save the last trajectory:
-    np.save(filename + "%d.npy"%q,ieval)
-    file_names.append(filename + "%d.npy"%q)
+    np.save(filename + "_%d.npy"%q,ieval)
+    file_names.append(filename + "_%d.npy"%q)
     # Build a new reader and return it:
     reader = pco.source(file_names)
     reader.chunksize = Y1.chunksize
@@ -142,8 +147,8 @@ def TripleProducts(Y1,Y2,Y3,filename):
         piece2 = piece[2][1]
         # Check if the last trajectory is finished:
         if traj_id > q:
-            np.save(filename + "%d.npy"%q,ieval)
-            file_names.append(filename + "%d.npy"%q)
+            np.save(filename + "_%d.npy"%q,ieval)
+            file_names.append(filename + "_%d.npy"%q)
             ieval = np.zeros((0,r))
             q += 1
         # Compute all the products and stack them underneath ieval:
@@ -151,8 +156,8 @@ def TripleProducts(Y1,Y2,Y3,filename):
         chunkeval = np.reshape(chunkeval,(chunkeval.shape[0],r))
         ieval = np.vstack((ieval,chunkeval))
     # Save the last trajectory:
-    np.save(filename + "%d.npy"%q,ieval)
-    file_names.append(filename + "%d.npy"%q)
+    np.save(filename + "_%d.npy"%q,ieval)
+    file_names.append(filename + "_%d.npy"%q)
     # Construct the reader for the triple-product basis:
     reader = pco.source(file_names)
     reader.chunksize = Y1.chunksize
@@ -172,10 +177,39 @@ def Diagonalize(reader,tau,M):
     -----------
     pyemma-TICA-object, from which all important information can be extracted.
     '''
-    # Instantiate TICA-object:
-    tica = TICA(tau,M)
+    # Instantiate TICA-object. It is important to set mean=0 here, otherwise the
+    # mean would be substracted from the time-series.
+    tica = TICA(tau,M,epsilon=1e-14,mean=0)
     # Construct the stages of the pipeline:
     stages = [reader,tica]
     # Run the pipeline:
-    pipe = pco.pipeline(stages)
-    return pipe
+    pco.pipeline(stages)
+    # Restrict the eigenvalue and eigenvectors to the requested number.
+    tica.eigenvalues = tica.eigenvalues[:M]
+    tica.eigenvectors = tica.eigenvectors[:,:M]
+    return tica
+
+def EvalFourier(x,M):
+    ''' Evaluates all real Fourier basis functions up to order M over 1-d-array
+    x.
+    
+    Parameters:
+    ------------
+    x: ndarray, shape(T,), data points.
+    M: int, highest frequency, i.e. all functions including sin(Mx) and cos(Mx)
+        are evaluated.
+        
+    Returns:
+    ------------
+    ndarray, shape(T,2*M+1)
+    '''
+    # Get the data size:
+    T = x.shape[0]
+    # Prepare output:
+    y = np.zeros((T,2*M+1))
+    # Evaluate:
+    y[:,0] = 1
+    for m in range(1,M+1):
+        y[:,2*m-1] = np.sin(m*x)
+        y[:,2*m] = np.cos(m*x)
+    return y

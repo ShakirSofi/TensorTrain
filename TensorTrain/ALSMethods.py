@@ -66,9 +66,9 @@ def ALSSweep(T,A):
         # Call the eigenvalue solver:
         eigv = UT.Diagonalize(Yk,A.tau,A.M)
         # Update reference timescales:
-        A.UpdateTS(eigv.eigenvalues,ev=True)
         print "Eigenvalues:"
         print eigv.eigenvalues
+        A.UpdateTS(eigv.eigenvalues,ev=True)
         # Perform low-rank decomposition:
         dims = T.GetRankTriple(k)
         LR = LRM.LowRank(eigv,dims,A)
@@ -83,12 +83,12 @@ def ALSSweep(T,A):
             Ik = UT.DoubleProducts(Y1,Y2,T.tensordir+"Interface%d"%k,Ul[0])
         T.SetInterface(k,Ik)
         # Update component k:
-        T.SetComponent(k,np.reshape(Ul[0],(dims[0],dims[1],LR.R)))
+        T.SetComponentTensor(k,np.reshape(Ul[0],(dims[0],dims[1],LR.R)))
         # Update next component:
         Ukplus = T.ComponentTensor(k+1)
         Uk2 = np.reshape(Ul[1].transpose(),(LR.R,dims[2],LR.M))
         Ukplus = np.einsum('ijk,jlm->ilmk',Uk2,Ukplus)
-        T.SetComponent(k+1,Ukplus)
+        T.SetComponentTensor(k+1,Ukplus)
         # Change the root:
         T.root = k+1
         # Store the objective function value:
@@ -129,12 +129,12 @@ def ALSSweep(T,A):
             Ik = UT.DoubleProducts(Y2,Y3,T.tensordir+"Interface%d"%(k-1),Ul[0])
         T.SetInterface(k-1,Ik)
         # Update component k:
-        T.SetComponent(k,np.reshape(Ul[0].transpose(),(LR.R,dims[1],dims[2])))
+        T.SetComponentTensor(k,np.reshape(Ul[0].transpose(),(LR.R,dims[1],dims[2])))
         # Update next component:
         Ukplus = T.ComponentTensor(k-1)
         Uk2 = np.reshape(Ul[1].transpose(),(LR.R,dims[0],LR.M))
         Ukplus = np.einsum('ijk,lkm->ijlm',Ukplus,Uk2)
-        T.SetComponent(k-1,Ukplus)
+        T.SetComponentTensor(k-1,Ukplus)
         # Change the root:
         T.root = k-1
         # Store the objective function value:
