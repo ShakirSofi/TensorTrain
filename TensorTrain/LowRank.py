@@ -14,7 +14,7 @@ class LowRank:
     dims: triple of the dimensions (r_p-1,n,r_p).
     Ctau, C0: ndarrays, shape(r_p-1*n*r_p,r_p-1*n*r_p), correlation matrices.
     '''
-    def __init__(self,U0,U1,dims,Ctau,C0):
+    def __init__(self,U0,U1,M,Ctau,C0):
         # Define attributes:
         self.R = U0.shape[1]
         self.n0 = U0.shape[0]
@@ -25,7 +25,7 @@ class LowRank:
         self.C0 = C0
         # Also extract the dimensions of the high-dimensional representation:
         self.Np = Ctau.shape[0]
-        self.M = U1.shape[0]/dims[2]
+        self.M = M
         # Generate the accordingly shaped  high-dimensional repr. U:
         U = np.dot(self.U0,self.U1.transpose())
         self.U = np.reshape(U,(self.Np,self.M))
@@ -184,7 +184,7 @@ class LowRank:
         # It is easiest to start in Np-by-M matrix form and reshape at the end:
         DL = np.zeros((self.Np,self.M))
         # Compute derivatives of unconstrained objective first:
-        DL += np.dot(self.Ctau,self.U)
+        DL -= np.dot(self.Ctau,self.U)
         # Now add the constraints one by one:
         Q = self.Orthogonality()
         for s in range(self.M):

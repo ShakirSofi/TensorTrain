@@ -145,7 +145,9 @@ class BlockTTtensor:
             else:
                 Yk = Ut.DoubleProducts(Yk,Fk,self.tensordir+"Interface%d"%k,Uk)
             interface_list.append(Yk)
-        # Loop from final position down to the loop:
+        # Loop from final position down to the loop. We collect all the readers
+        # for the right part separately.
+        backward_list = []
         for k in range(self.d-2,self.root-1,-1):
             # Get the componnet tensor for this coordinate:
             Uk = self.ComponentTensor(k+1,order=2)
@@ -154,8 +156,9 @@ class BlockTTtensor:
             # Compute all products between this basis and the last interface:
             if k == (self.d-2):
                 Yk = Ut.ApplyLinearTransform(Fk,Uk.transpose(),self.tensordir+"Interface%d"%k)
-                interface_list.append(Yk)
             else:
                 Yk = Ut.DoubleProducts(Fk,Yk,self.tensordir+"Interface%d"%k,Uk.transpose())
-                interface_list.insert(-1,Yk)
+            backward_list.insert(0,Yk)
+        # Glue the two lists together:
+        interface_list = interface_list + backward_list
         return interface_list

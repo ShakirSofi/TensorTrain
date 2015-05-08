@@ -30,6 +30,7 @@ def LowRank(eigv,dims,A):
     Ctau = eigv.cov_tau
     C0 = eigv.cov
     # Compute initial low-rank decomposition:
+    Up = np.reshape(Up,(dims[0]*dims[1],dims[2]*A.M))
     Uk,sk,Wk = scl.svd(Up,full_matrices=False)
     rfull = np.shape(sk)[0]
     Wk = np.dot(np.diag(sk),Wk)
@@ -40,7 +41,7 @@ def LowRank(eigv,dims,A):
         U0 = Uk[:,:rnew]
         U1 = Wk[:rnew,:].transpose()
         # Create a low-rank object for this decomposition:
-        LR = TLR.LowRank(U0,U1,dims,Ctau,C0)
+        LR = TLR.LowRank(U0,U1,A.M,Ctau,C0)
         # If orthogonality constraints are not violated, accept:
         if (np.max(np.abs(LR.Orthogonality())) < eps_sol):
             print "Solutions are orthonormal."

@@ -22,7 +22,7 @@ def RunALS(T,A):
     J = 0
     q = 0
     # Iterate:
-    while 1:
+    while q < 1:
         print "-------------"
         print "Iteration %d"%q
         print "-------------"
@@ -95,6 +95,7 @@ def ALSSweep(T,A):
         A.UpdateObjective(LR.Objective())
     # Loop backward over the tensor:
     for k in range(T.d-1,0,-1):
+        print "Backward problem %d"%(k)
         # Get the readers that are needed:
         Y1 = T.GetInterface(k-1)
         Y2 = T.ComponentBasis(k)
@@ -117,7 +118,7 @@ def ALSSweep(T,A):
         Up = np.transpose(Up,[1,2,0,3])
         Up = np.reshape(Up,(dims[1]*dims[2]*dims[0],T.M))
         eigv.eigenvectors = Up
-        LR = LRM.LowRank(eigv,dims,A)
+        LR = LRM.LowRank(eigv,(dims[1],dims[2],dims[0]),A)
         # Update reference timescales again:
         A.UpdateTS(LR.Timescales(A.tau))
         # Get the results:
