@@ -119,7 +119,7 @@ class LowRank:
         float.
         '''
         # Compute eigenvalue trace:
-        L = -0.5*np.trace(np.dot(self.U.transpose(),np.dot(self.Ctau,self.U)))
+        L = self.Objective()
         # Add the constraints:
         q = self.Penalty(mu)
         return (L + q)
@@ -150,7 +150,8 @@ class LowRank:
         ndarray, shape(self.M,self.M), the overlaps between the functions U(:,n)
             and U(:,n').
         '''
-        return np.dot(self.U.transpose(),np.dot(self.C0,self.U)) - np.eye(self.M)
+        Q =  np.dot(self.U.transpose(),np.dot(self.C0,self.U)) - np.eye(self.M)
+        return Q
     def Gradient(self,mu):
         ''' Compute the gradient of the constrained functional w.r.t. the low-
         rank variables.
@@ -181,18 +182,16 @@ class LowRank:
         -------------
         ndarray, shape(n0*n1,), the gradient vector.
         '''
-        # It is easiest to start in Np-by-M matrix form and reshape at the end:
-        DL = np.zeros((self.Np,self.M))
         # Compute derivatives of unconstrained objective first:
-        DL -= np.dot(self.Ctau,self.U)
+        DL = -np.dot(self.Ctau,self.U)
         # Now add the constraints one by one:
         Q = self.Orthogonality()
         for s in range(self.M):
             for t in range(s,self.M):
-                DL[:,s] += mu*Q[s,t]*np.dot(self.C0,self.U[:,s])
-                DL[:,t] += mu*Q[s,t]*np.dot(self.C0,self.U[:,t])
+                DL[:,s] += mu*Q[s,t]*np.dot(self.C0,self.U[:,t])
+                DL[:,t] += mu*Q[s,t]*np.dot(self.C0,self.U[:,s])
         # Reshape DL to vector form:
-        DL = np.reshape(DL,(self.Np*self.M))
+        DL = np.reshape(DL,(self.Np*self.M,))
         return DL
     def Jacobian(self):
         ''' Return the Jacobian matrix of the map that takes the low-dimen-

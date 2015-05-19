@@ -1,7 +1,7 @@
 import numpy as np
 
 class ALS:
-    def __init__(self,tau,M,filename,eps_iter=1e-2,eps_orth=1e-8,eps_rank=0.9,mu0=10):
+    def __init__(self,tau,M,filename,eps_iter=1e-2,eps_orth=1e-6,eps_rank=0.9,mu0=10,mu_max=1e15):
         ''' Creates an ALS-object that keeps track of several important quanti-
         ies during an ALS-iteration.
         
@@ -21,6 +21,7 @@ class ALS:
         self.eps_orth = eps_orth
         self.eps_rank = eps_rank
         self.mu0 = mu0
+        self.mu_max = mu_max
         self.M = M
         self.filename = filename
         # Initialize objective value:

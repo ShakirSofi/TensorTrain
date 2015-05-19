@@ -100,24 +100,22 @@ def ALSSweep(T,A):
         Y1 = T.GetInterface(k-1)
         Y2 = T.ComponentBasis(k)
         if k == T.d-1:
-            Yk = UT.DoubleProducts(Y1,Y2,A.filename)
+            Yk = UT.DoubleProducts(Y2,Y1,A.filename)
         else:
             Y3 = T.GetInterface(k)
-            Yk = UT.TripleProducts(Y1,Y2,Y3,A.filename)
+            Yk = UT.TripleProducts(Y2,Y3,Y1,A.filename)
         # Call the eigenvalue solver:
         eigv = UT.Diagonalize(Yk,A.tau,A.M)
         # Update reference timescales:
         A.UpdateTS(eigv.eigenvalues,ev=True)
         print "Eigenvalues:"
         print eigv.eigenvalues
-        # Perform low-rank decomposition. On the backward iteration, some indi-
-        # ces must be swapped before the decomposition can be performed:
+        # Perform low-rank decomposition:
         dims = T.GetRankTriple(k)
-        Up = eigv.eigenvectors
-        Up = np.reshape(Up,(dims[0],dims[1],dims[2],T.M))
-        Up = np.transpose(Up,[1,2,0,3])
-        Up = np.reshape(Up,(dims[1]*dims[2]*dims[0],T.M))
-        eigv.eigenvectors = Up
+        # Save the results:
+        np.savetxt(T.tensordir+"Ctau_Try.dat",eigv.cov_tau)
+        np.savetxt(T.tensordir+"C0_Try.dat",eigv.cov)
+        np.savetxt(T.tensordir+"Up_Try.dat",eigv.eigenvectors)
         LR = LRM.LowRank(eigv,(dims[1],dims[2],dims[0]),A)
         # Update reference timescales again:
         A.UpdateTS(LR.Timescales(A.tau))

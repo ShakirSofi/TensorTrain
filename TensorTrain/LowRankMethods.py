@@ -23,7 +23,7 @@ def LowRank(eigv,dims,A):
         composition. If None is returned, the optimization failed.
     '''
     # Define a threshold for orthogonality of solutions, remains hard-coded here:
-    eps_sol = 1e-14
+    eps_sol = 1e-10
     # Extract the current eigenvector array:
     Up = eigv.eigenvectors
     # Get the correlation matrices:
@@ -35,7 +35,7 @@ def LowRank(eigv,dims,A):
     rfull = np.shape(sk)[0]
     Wk = np.dot(np.diag(sk),Wk)
     # Start adaptive rank selection:
-    rnew = 1
+    rnew = rfull
     while rnew <= rfull:
         # Select only the first rnew singular values:
         U0 = Uk[:,:rnew]
@@ -43,31 +43,31 @@ def LowRank(eigv,dims,A):
         # Create a low-rank object for this decomposition:
         LR = TLR.LowRank(U0,U1,A.M,Ctau,C0)
         # If orthogonality constraints are not violated, accept:
-        if (np.max(np.abs(LR.Orthogonality())) < eps_sol):
-            print "Solutions are orthonormal."
-            break
+#         if (np.max(np.abs(LR.Orthogonality())) < eps_sol):
+#             print "Solutions are orthonormal."
+#             break
         # Otherwise, attempt optimization:
+        # else:
+        print "Attempting Optimization."
+        LR = Optimize(LR,A.eps_orth,A.mu0,A.mu_max)
+        # Check acceptance criteria:
+        # First, check if optimization failed entirely:
+        if LR == None:
+            print "Optimization failed."
+            rnew += 1
         else:
-            print "Attempting Optimization."
-            LR = Optimize(LR,A.eps_orth,A.mu0)
-            # Check acceptance criteria:
-            # First, check if optimization failed entirely:
-            if LR == None:
-                print "Optimization failed."
-                rnew += 1
+            # Get the timescales and check:
+            ts = LR.Timescales(A.tau)
+            if np.all(ts >= A.eps_rank*A.RefTS()):
+                break
             else:
-                # Get the timescales and check:
-                ts = LR.Timescales(A.tau)
-                if np.all(ts >= A.eps_rank*A.RefTS()):
-                    break
-                else:
-                    rnew += 1
+                rnew += 1
     print "Rank modified to %d"%rnew
     print ""
     return LR
 
 
-def Optimize(LR,eps_orth,mu0):
+def Optimize(LR,eps_orth,mu0,mu_max):
     ''' Runs the constrained optimization problem for each microiteration step
     in ALS. 
      
@@ -77,6 +77,7 @@ def Optimize(LR,eps_orth,mu0):
         decomposition.
     eps_orth: float, tolerance for orthogonality of solutions.
     mu0: float, initial value of penalty parameter.
+    mu_max: float, maximal value of penalty parameter.
     
     Returns:
     --------------
@@ -86,25 +87,36 @@ def Optimize(LR,eps_orth,mu0):
     # Initialize mu:
     mu = mu0
     # Get initial value of constrained objective:
-    L0 = LR.ConstrainedObjective(mu)
+    L0 = LR.Objective()
     while 1:
         # Get the current components as a vector:
         u0 = LR.GetVector()
+        # Compute objective function and constraints:
+        L = LR.Objective()
+        q = np.max(np.abs(LR.Orthogonality()))
+        #print "Orth-Matrix: ", LR.Orthogonality()
+        print "Objective: %.10f"%L
+        print "Constraints: %.10f"%q
+        print "Penalty: %.10f"%(LR.Penalty(mu))
+        #print "Mu: %f"%mu
+        print "Gradient: %.10f"%(np.max(LR.Gradient(mu)))
+        print ""
         # Set up functions for optimization:
         f = ft.partial(ObjectiveIter,LR=LR,mu=mu)
         fprime = ft.partial(GradientIter,LR=LR,mu=mu)
         # Solve unconstrained problem by conjugate gradient iteration:
-        u = sco.fmin_cg(f,u0,fprime=fprime,maxiter=1000,gtol=5e-3,disp=0)
+        #u,_,_,_,warn = sco.fmin_cg(f,u0,gtol=1e-2,full_output=True,disp=1)
+        u,_,_,_,warn = sco.fmin_cg(f,u0,fprime,gtol=1e-3,full_output=True,disp=1)
         # Update LR by u:
         LR.SetVector(u)
-        # Compute objective function and penalty:
-        L = LR.ConstrainedObjective(mu)
-        p = LR.Penalty(mu)
+        # Compute objective function and constraints:
+        L = LR.Objective()
+        q = np.max(np.abs(LR.Orthogonality()))
         # Check convergence criteria:
-        if np.any(np.isnan(u)) or (abs(L)>10*abs(L0)):
+        if np.any(np.isnan(u)) or (abs(L)>10*abs(L0)) or np.abs(mu>mu_max):
             LR = None
             break
-        if p < eps_orth:
+        if q < eps_orth:
             break
         else:
             # Update mu:
