@@ -2,7 +2,7 @@ import numpy as np
 import scipy.linalg as scl
 
 def BestApprox(reader,I):
-    ''' This function solves the best-approximation problem for the staionary
+    ''' This function solves the best-approximation problem for the stationary
     distribution from the data.
     
     Parameters:
@@ -15,8 +15,8 @@ def BestApprox(reader,I):
     # reader:
     nf = reader.dimension()
     ntraj = reader.number_of_trajectories()
-    tl = reader.trajectory_lenghts()
-    I = reader.iterator()
+    tl = reader.trajectory_lengths()
+    It = reader.iterator()
     # Compute the mean values from the data:
     # This is the vector of the means:
     b = np.zeros(nf)
@@ -24,7 +24,7 @@ def BestApprox(reader,I):
     ib = np.zeros(nf)
     q = 0
     # Loop over the chunks:
-    for piece in I:
+    for piece in It:
         # Check if a new trajectory has been started:
         if piece[0] > q:
             ib /= tl[q]
