@@ -5,6 +5,7 @@ import scipy.optimize as sco
 import functools as ft
 
 import pyemma.util.linalg as pla
+import numdifftools as nd
 
 def LowRank(eigv,sp,tp,A):
     ''' Performs the actual low-rank decomposition step inside ALS.
@@ -44,7 +45,6 @@ def LowRank(eigv,sp,tp,A):
             break
         # Initialize optimization by first columns of V:
         Up = (V[:,1:r]).copy()
-        print Up.shape
         # Perform optimization:
         Up,L = Optimize(Up,Ctau,C0,sp,tp,r,A.M)
         print "Optimization finished."
@@ -75,8 +75,11 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M):
     if R > 1:
         # Define objective function:
         f = ft.partial(Objective,Ctau=Ctau,C0=C0,sp=sp,tp=tp,R=R,M=M)
+        # Define derivative:
+        fp = nd.Gradient(f)
+        He = nd.Hessian(f)
         # Optimize:
-        res = sco.minimize(f,u0,method="Anneal")
+        res = sco.minimize(f,u0,method="Newton-CG",jac=fp,hess=He)
         # Extract result and objective function:
         u = res.x
         L = res.fun
