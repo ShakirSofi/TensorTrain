@@ -5,7 +5,6 @@ import scipy.optimize as sco
 import functools as ft
 
 import pyemma.util.linalg as pla
-import numdifftools as nd
 
 def LowRank(eigv,sp,tp,A):
     ''' Performs the actual low-rank decomposition step inside ALS.
@@ -75,11 +74,8 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M):
     if R > 1:
         # Define objective function:
         f = ft.partial(Objective,Ctau=Ctau,C0=C0,sp=sp,tp=tp,R=R,M=M)
-        # Define derivative:
-        fp = nd.Gradient(f)
-        He = nd.Hessian(f)
         # Optimize:
-        res = sco.minimize(f,u0,method="Newton-CG",jac=fp,hess=He)
+        res = sco.minimize(f,u0,method="CG",jac=True)
         # Extract result and objective function:
         u = res.x
         L = res.fun
@@ -88,7 +84,7 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M):
         # Normalize Up:
         u = Normalize(u,C0)
     else:
-        L = Objective(u0,Ctau,C0,sp,tp,R,M)
+        L,_ = Objective(u0,Ctau,C0,sp,tp,R,M)
         u = np.reshape(u0,(sp,R-1))
     # Finally, add the column for the constant:
     u = np.hstack((np.eye(sp,1),u))
@@ -109,19 +105,77 @@ def Objective(u,Ctau,C0,sp,tp,R,M):
     # Add a column encoding the constant:
     U = np.hstack((np.eye(sp,1),U))
     # Compute the two correlation matrices:
-    Ctau = np.einsum('ij,iklm,ln->jknm',U,Ctau,U)
-    C0 = np.einsum('ij,iklm,ln->jknm',U,C0,U)
+    Ctaup = np.einsum('ij,iklm,ln->jknm',U,Ctau,U)
+    C0p = np.einsum('ij,iklm,ln->jknm',U,C0,U)
     # Reshape the correlation matrices:
-    Ctau = np.reshape(Ctau,(R*tp,R*tp))
-    C0 = np.reshape(C0,(R*tp,R*tp))
+    Ctaup = np.reshape(Ctaup,(R*tp,R*tp))
+    C0p = np.reshape(C0p,(R*tp,R*tp))
     # Solve the optimization problem:
-    D,_ = pla.eig_corr(C0,Ctau)
+    D,X = pla.eig_corr(C0p,Ctaup)
+    # Check for failure of the problem:
     if (D is None) or (D.shape[0] < M):
         L = 0
+        grad = None
     else:
+        # Compute the objective function:
         L = -np.sum(D[:M])
-    return L
+        if R == 1:
+            grad = None
+        else:
+            # Restrict the eigenvectors to necessary number:
+            X = X[:,:M]
+            # Compute the Jacobian of Ctau.C0 w.r.t. U:
+            J = Jacobian(Ctau,C0,U)
+            # Compute the gradient w.r.t. Ctau,C0:
+            g = GradCMatrix(X,D,R,tp)
+            # Compute the final gradient by dot-product:
+            grad = np.dot(g,J)
+    return (L,grad)
     
+def GradCMatrix(X,D,R,tp):
+    '''
+    Compute the gradient of the full objective function w.r.t. the entries of Ctau and C0
+    '''
+    # Get the number of eigenvectors:
+    M = X.shape[1]
+    # Prepare output:
+    g1 = np.zeros((R*tp,R*tp))
+    g2 = np.zeros((R*tp,R*tp))
+    # Iteratively compute the entries;
+    for m in range(M):
+        # Update the Ctau-part:
+        g1 -= np.outer(X[:,m],X[:,m])*(2 - np.eye(R*tp,R*tp))
+        # Update the C0-part:
+        g2 += D[m]*np.outer(X[:,m],X[:,m])*(2 - np.eye(R*tp,R*tp))
+    # Reshape and glue together:
+    g1 = np.reshape(g1,(1,R*tp*R*tp))
+    g2 = np.reshape(g2,(1,R*tp*R*tp))
+    g = np.hstack((g1,g2))
+    g = g.flatten()
+    return g
+    
+def Jacobian(Ctaup,C0p,U):
+    ''' Computes the Jacobian of the correlation matrices Ctau,C0 w.r.t. the
+    low-rank solution U:'''
+    # Get the shapes:
+    sp,R = U.shape
+    tp = Ctaup.shape[1]
+    # Compute the two summands:
+    A1 = np.kron(U,np.eye(R,R-1))
+    A1 = np.reshape(A1,(sp,R,R,R-1))
+    A2 = np.transpose(A1,[0,2,1,3])
+    # Sum them up:
+    A = A1 + A2
+    # Compute the Jacobian by einsum:
+    J1 = np.einsum('ijkl,kmno->mjnlio',Ctaup,A)
+    J2 = np.einsum('ijkl,kmno->mjnlio',C0p,A)
+    # Reshape and stack them:
+    J1 = np.reshape(J1,(R*tp*R*tp,sp*(R-1)))
+    J2 = np.reshape(J2,(R*tp*R*tp,sp*(R-1)))
+    J = np.vstack((J1,J2))
+    return J
+        
+
 def Normalize(Up,C0):
     ''' Normalize optimization result such that the corresponding basis
     have unit length.
