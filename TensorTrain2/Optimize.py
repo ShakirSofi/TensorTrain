@@ -91,7 +91,7 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M):
     return (u,L)   
     
 
-def Objective(u,Ctau,C0,sp,tp,R,M):
+def Objective(u,Ctau,C0,sp,tp,R,M,return_grad=True):
     ''' This is the actual objective function of the low-rank optimization
     problem.
     
@@ -130,7 +130,11 @@ def Objective(u,Ctau,C0,sp,tp,R,M):
             g = GradCMatrix(X,D,R,tp)
             # Compute the final gradient by dot-product:
             grad = np.dot(g,J)
-    return (L,grad)
+            grad = grad.flatten()
+    if return_grad:
+        return (L,grad)
+    else:
+        return L
     
 def GradCMatrix(X,D,R,tp):
     '''
@@ -147,11 +151,10 @@ def GradCMatrix(X,D,R,tp):
         g1 -= np.outer(X[:,m],X[:,m])*(2 - np.eye(R*tp,R*tp))
         # Update the C0-part:
         g2 += D[m]*np.outer(X[:,m],X[:,m])*(2 - np.eye(R*tp,R*tp))
-    # Reshape and glue together:
-    g1 = np.reshape(g1,(1,R*tp*R*tp))
-    g2 = np.reshape(g2,(1,R*tp*R*tp))
-    g = np.hstack((g1,g2))
-    g = g.flatten()
+    # Extract upper triangles and glue together:
+    iu = np.triu_indices(g1.shape[0])
+    g = np.hstack((g1[iu],g2[iu]))
+    g = g[None,:]
     return g
     
 def Jacobian(Ctaup,C0p,U):
@@ -163,15 +166,20 @@ def Jacobian(Ctaup,C0p,U):
     # Compute the two summands:
     A1 = np.kron(U,np.eye(R,R-1))
     A1 = np.reshape(A1,(sp,R,R,R-1))
-    A2 = np.transpose(A1,[0,2,1,3])
-    # Sum them up:
-    A = A1 + A2
     # Compute the Jacobian by einsum:
-    J1 = np.einsum('ijkl,kmno->mjnlio',Ctaup,A)
-    J2 = np.einsum('ijkl,kmno->mjnlio',C0p,A)
-    # Reshape and stack them:
-    J1 = np.reshape(J1,(R*tp*R*tp,sp*(R-1)))
-    J2 = np.reshape(J2,(R*tp*R*tp,sp*(R-1)))
+    J1 = np.einsum('ijkl,kmno->mjnlio',Ctaup,A1)
+    J2 = np.einsum('ijkl,kmno->mjnlio',C0p,A1)
+    # Add diagonal terms:
+    for r in range(1,R):
+        J1[r,:,r,:,:,r-1] += np.einsum('ijkl,i->jlk',Ctaup,U[:,r])
+        J2[r,:,r,:,:,r-1] += np.einsum('ijkl,i->jlk',C0p,U[:,r])
+    # Reshape, extract the upper triangle:
+    iu = np.triu_indices(R*tp)
+    J1 = np.reshape(J1,(R*tp,R*tp,sp*(R-1)))
+    J1 = J1[iu[0],iu[1],:]
+    J2 = np.reshape(J2,(R*tp,R*tp,sp*(R-1)))
+    J2 = J2[iu[0],iu[1],:]
+    # Glue them together:
     J = np.vstack((J1,J2))
     return J
         
