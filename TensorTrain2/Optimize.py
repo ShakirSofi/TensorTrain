@@ -109,19 +109,51 @@ def Objective(u,Ctau,C0,sp,tp,R,M):
     # Add a column encoding the constant:
     U = np.hstack((np.eye(sp,1),U))
     # Compute the two correlation matrices:
-    Ctau = np.einsum('ij,iklm,ln->jknm',U,Ctau,U)
-    C0 = np.einsum('ij,iklm,ln->jknm',U,C0,U)
+    Ctaup = np.einsum('ij,iklm,ln->jknm',U,Ctau,U)
+    C0p = np.einsum('ij,iklm,ln->jknm',U,C0,U)
     # Reshape the correlation matrices:
-    Ctau = np.reshape(Ctau,(R*tp,R*tp))
-    C0 = np.reshape(C0,(R*tp,R*tp))
+    Ctau = np.reshape(Ctaup,(R*tp,R*tp))
+    C0 = np.reshape(C0p,(R*tp,R*tp))
     # Solve the optimization problem:
-    D,_ = pla.eig_corr(C0,Ctau)
+    D,X = pla.eig_corr(C0,Ctau)
+    # Check for failure of the problem:
     if (D is None) or (D.shape[0] < M):
         L = 0
+        grad = None
     else:
+        # Compute the objective function:
         L = -np.sum(D[:M])
+        # Restrict the eigenvectors to necessary number:
+        X = X[:,:M]
+        # Compute the Jacobian of Ctau.C0 w.r.t. U:
+        J = Jacobian(Ctaup,C0p,U)
     return L
     
+def Jacobian(Ctaup,C0p,U):
+    ''' Computes the Jacobian of the correlation matrices Ctau,C0 w.r.t. the
+    low-rank solution U:'''
+    # Get the shapes:
+    R = Ctaup.shape[0]
+    tp = Ctaup.shape[2]
+    sp = U.shape[0]
+    # Drop the first column of U:
+    U = U[:,1:]
+    # Compute the two summands:
+    A1 = np.kron(U,np.eye(R,R))
+    A1 = np.reshape(A1,(sp,R,R,R))
+    A2 = np.transpose(A1,[0,2,1,3])
+    # Sum them up:
+    A = A1 + A2
+    # Compute the Jacobian by einsum:
+    J1 = np.einsum('ijkl,kmno->mjnlio',Ctaup,A)
+    J2 = np.einsum('ijkl,kmno->mjnlio',C0p,A)
+    # Reshape and stack them:
+    J1 = np.reshape(J1,(R*tp*R*tp,sp*R))
+    J2 = np.reshape(J2,(R*tp*R*tp,sp*R))
+    J = np.vstack((J1,J2))
+    return J
+        
+
 def Normalize(Up,C0):
     ''' Normalize optimization result such that the corresponding basis
     have unit length.
