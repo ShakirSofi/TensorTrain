@@ -53,7 +53,7 @@ def LowRank(eigv,sp,tp,A):
             print "Result accepted. Rank set to %d"%r
             break
         else:
-            if (count <= A.cmax) and (r > 1):
+            if (count < A.cmax) and (r > 1):
                 print "Result insufficient. Retrying."
                 count += 1
             else:
@@ -84,7 +84,7 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M):
         # Normalize Up:
         u = Normalize(u,C0)
     else:
-        L,_ = Objective(u0,Ctau,C0,sp,tp,R,M)
+        L = Objective(u0,Ctau,C0,sp,tp,R,M,return_grad=False)
         u = np.reshape(u0,(sp,R-1))
     # Finally, add the column for the constant:
     u = np.hstack((np.eye(sp,1),u))
@@ -115,12 +115,16 @@ def Objective(u,Ctau,C0,sp,tp,R,M,return_grad=True):
     # Check for failure of the problem:
     if (D is None) or (D.shape[0] < M):
         L = 0
-        grad = None
+        if R == 1 or return_grad==False:
+            return L
+        else:
+            grad = None
+            return (L,grad)
     else:
         # Compute the objective function:
         L = -np.sum(D[:M])
-        if R == 1:
-            grad = None
+        if R == 1 or return_grad==False:
+            return L
         else:
             # Restrict the eigenvectors to necessary number:
             X = X[:,:M]
@@ -131,11 +135,8 @@ def Objective(u,Ctau,C0,sp,tp,R,M,return_grad=True):
             # Compute the final gradient by dot-product:
             grad = np.dot(g,J)
             grad = grad.flatten()
-    if return_grad:
-        return (L,grad)
-    else:
-        return L
-    
+            return (L,grad)
+
 def GradCMatrix(X,D,R,tp):
     '''
     Compute the gradient of the full objective function w.r.t. the entries of Ctau and C0
@@ -157,22 +158,19 @@ def GradCMatrix(X,D,R,tp):
     g = g[None,:]
     return g
     
-def Jacobian(Ctaup,C0p,U):
+def Jacobian(Ctau,C0,U):
     ''' Computes the Jacobian of the correlation matrices Ctau,C0 w.r.t. the
     low-rank solution U:'''
     # Get the shapes:
     sp,R = U.shape
-    tp = Ctaup.shape[1]
+    tp = Ctau.shape[1]
     # Compute the two summands:
-    A1 = np.kron(U,np.eye(R,R-1))
+    A1 = np.kron(U,np.eye(R,R)[:,1:])
     A1 = np.reshape(A1,(sp,R,R,R-1))
+    A2 = np.transpose(A1,[0,2,1,3])
     # Compute the Jacobian by einsum:
-    J1 = np.einsum('ijkl,kmno->mjnlio',Ctaup,A1)
-    J2 = np.einsum('ijkl,kmno->mjnlio',C0p,A1)
-    # Add diagonal terms:
-    for r in range(1,R):
-        J1[r,:,r,:,:,r-1] += np.einsum('ijkl,i->jlk',Ctaup,U[:,r])
-        J2[r,:,r,:,:,r-1] += np.einsum('ijkl,i->jlk',C0p,U[:,r])
+    J1 = np.einsum('ijkl,kmno->mjnlio',Ctau,A1) + np.einsum('ijkl,imno->mjnlko',Ctau,A2)
+    J2 = np.einsum('ijkl,kmno->mjnlio',C0,A1) + np.einsum('ijkl,imno->mjnlko',C0,A2)
     # Reshape, extract the upper triangle:
     iu = np.triu_indices(R*tp)
     J1 = np.reshape(J1,(R*tp,R*tp,sp*(R-1)))
