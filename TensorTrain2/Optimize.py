@@ -75,7 +75,9 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M):
         # Define objective function:
         f = ft.partial(Objective,Ctau=Ctau,C0=C0,sp=sp,tp=tp,R=R,M=M)
         # Optimize:
-        res = sco.minimize(f,u0,method="CG",jac=True)
+        res = sco.minimize(f,u0,method="CG",jac=True,tol=1e-3)
+        print res.message
+        print "Number of function calls: %d"%res.nfev
         # Extract result and objective function:
         u = res.x
         L = res.fun
@@ -114,6 +116,10 @@ def Objective(u,Ctau,C0,sp,tp,R,M,return_grad=True):
     D,X = pla.eig_corr(C0p,Ctaup)
     # Check for failure of the problem:
     if (D is None) or (D.shape[0] < M):
+        if D is None:
+            print "Warning: Problem could not be solved at all."
+        else:
+            print "Warning: Only %d eigenvalues could be computed."%D.shape[0]
         L = 0
         if R == 1 or return_grad==False:
             return L
