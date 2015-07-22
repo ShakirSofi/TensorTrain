@@ -33,7 +33,6 @@ def LowRank(eigv,sp,tp,A):
     V,_,_ = scl.svd(Upp)
     # Try to optimize with increasing ranks:
     r = 1
-    count = 0
     rmax = np.minimum(A.rmax,sp)
     while r <= rmax:
         print "Attempting rank %d."%r
@@ -45,27 +44,21 @@ def LowRank(eigv,sp,tp,A):
         # Initialize optimization by first columns of V:
         Up = (V[:,1:r]).copy()
         # Perform optimization:
-        Up,L = Optimize(Up,Ctau,C0,sp,tp,r,A.M)
+        Up,L = Optimize(Up,Ctau,C0,sp,tp,r,A.M,A.gtol)
         print "Optimization finished."
         # Check if the result is good enough:
         if L < (A.tol*A.Lref):
-            A.retries.append(count+1)
             print "Result accepted. Rank set to %d"%r
             break
         else:
-            if (count < A.cmax) and (r > 1):
-                print "Result insufficient. Retrying."
-                count += 1
-            else:
-                print "Result insufficient. Increasing rank."
-                r += 1
-                count = 0
+            print "Result insufficient. Increasing rank."
+            r += 1
         if r > rmax:
             print "Optimization failed, maximum rank reached."
             Up = None
     return (Up,L)
 
-def Optimize(Up,Ctau,C0,sp,tp,R,M):
+def Optimize(Up,Ctau,C0,sp,tp,R,M,gtol):
     # Reshape Up:
     u0 = np.reshape(Up,(sp*(R-1),))
     # Reshape Ctau, C0:
@@ -75,9 +68,7 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M):
         # Define objective function:
         f = ft.partial(Objective,Ctau=Ctau,C0=C0,sp=sp,tp=tp,R=R,M=M)
         # Optimize:
-        res = sco.minimize(f,u0,method="CG",jac=True,tol=1e-3)
-        print res.message
-        print "Number of function calls: %d"%res.nfev
+        res = sco.minimize(f,u0,method="CG",jac=True,tol=gtol)
         # Extract result and objective function:
         u = res.x
         L = res.fun

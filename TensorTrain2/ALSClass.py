@@ -1,7 +1,7 @@
 import numpy as np
 
 class ALS:
-    def __init__(self,tau,dt,M,filename,rmax,tol,cmax=10,eps_iter=1e-2):
+    def __init__(self,tau,dt,M,filename,rmax,tol,gtol=1e-3,eps_iter=1e-2):
         ''' Creates an ALS-object that keeps track of several important quanti-
         ies during an ALS-iteration.
         
@@ -14,6 +14,7 @@ class ALS:
         rmax: int, maximal rank allowed during the iteration. ALS process will
             terminate without results if this rank is exceeded.
         tol: float: tolerance for acceptance of low-rank step.
+        gtol: float, stopping tolerance for CG-minimization in rank adaption step.
         eps_iter, float, convergence tolerance for overall iteration.
         '''
         # Make important quantities know:
@@ -24,13 +25,11 @@ class ALS:
         self.M = M
         self.filename = filename
         self.tol = tol
-        self.cmax = cmax
+        self.gtol = gtol
         # Initialize objective value and timescales:
         self.J = []
         self.ts = np.zeros((self.M-1,0))
         self.Lref = 0
-        # Also count the number of retries:
-        self.retries = []
     def UpdateObjective(self,Jnew):
         ''' Update objective function value.
         
