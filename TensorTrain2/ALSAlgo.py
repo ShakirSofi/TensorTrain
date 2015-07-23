@@ -85,6 +85,11 @@ def ALSSweep(T,A):
         T.R[k] = Up.shape[1]
         # Update the objective function:
         A.UpdateObjective(L)
+        # Update the least-squares errors:
+        if k > 0:
+            shapes = (T.R[k-1],T.basissize[k],T.basissize[k+1],T.R[k+1])
+            res = UT.LeastSquaresTest(eigv.cov,shapes,Up)
+            T.SetLSError(k,res)
         # Update component k:
         if k == 0:
             T.SetComponentTensor(k,np.reshape(Up,(1,T.basissize[k],T.R[k])))
@@ -130,6 +135,10 @@ def ALSSweep(T,A):
         T.R[k-1] = Up.shape[1]
         # Update the objective function:
         A.UpdateObjective(L)
+        if k < T.d-1:
+            shapes = (T.R[k],T.basissize[k],T.basissize[k-1],T.R[k-2])
+            res = UT.LeastSquaresTest(eigv.cov,shapes,Up)
+            T.SetLSError(k,res)
         # Update component k:
         if k == T.d-1:
             T.SetComponentTensor(k,np.reshape(Up,(T.R[k-1],T.basissize[k],1)))

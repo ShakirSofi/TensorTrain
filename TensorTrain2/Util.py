@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg as scl
 import scipy.special as scs
 import matplotlib.pyplot as plt
 
@@ -142,6 +143,35 @@ def Diagonalize(reader,tau,M):
     tica.eigenvalues = tica.eigenvalues[:M]
     tica.eigenvectors = tica.eigenvectors[:,:M]
     return tica
+
+''' Analysis functions:'''
+
+def LeastSquaresTest(C0,shapes,Up):
+    ''' Computes a least-squares approximation of the interface functions in
+    terms of the previous interface, to measure the contribution of a single 
+    coordinate.
+    
+    Parameters:
+    -----------
+    C0: ndarray, instantaneous correlation matrix of full 4-fold product basis.
+    shapes: tuple, with four entries, the dimensions of the bases in C0.
+    Up: ndaray, the interfaces to be approximated.
+    '''
+    # Reshape Up:
+    C0 = np.reshape(C0,shapes+shapes)
+    # Extract the part of C0 that contains only the first two basis sets:
+    C0 = C0[:,:,0,0,:,:,0,0]
+    # Compute the least-squares matrix:
+    A = C0[:,0,:,0]
+    # Compute the vector of right-hand sides:
+    B = C0[:,0,:,:].copy()
+    B = np.reshape(B,(shapes[0],shapes[0]*shapes[1]))
+    b = np.dot(B,Up)
+    # Solve least-squares problems:
+    _,res,_,_ = scl.lstsq(A,b)
+    # Sum up the residuals and return them:
+    return np.sum(res)
+    
 
 def EvalEigenfunctions(T,tau,filename):
     ''' Evaluates the eigenfunctions of a TT-tensor and saves the results.

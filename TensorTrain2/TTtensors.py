@@ -32,6 +32,8 @@ class BlockTTtensor:
             self.R[k] = self.U[k].shape[2]
         # Define a list of basis sizes:
         self.basissize = [self.basis[i].dimension() for i in range(self.d)]
+        # Define a list of least-squares errors (for analysis):
+        self.lse = np.zeros(self.d-2)
         # Compute the initial interfaces:
         self.interfaces = self.InitInterfaces()
     def GetRanks(self,k=-1):
@@ -103,6 +105,15 @@ class BlockTTtensor:
             component k.
         '''
         self.U[k] = U
+    def SetLSError(self,k,e):
+        ''' Update the least-squares error for a given component.
+        
+        Parameters:
+        -----------
+        k: int, the entry to be updated.
+        e: float, the new least-squares error.
+        '''
+        self.lse[k-1] = e
     def GetInterface(self,k):
         ''' Get the interface for component k.
         
