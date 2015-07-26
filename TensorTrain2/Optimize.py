@@ -183,13 +183,11 @@ def Normalize(Up,C0):
     ''' Normalize optimization result such that the corresponding basis
     have unit length.
     '''
-    # Compute C0 matrix:
-    C0 = np.einsum('ij,iklm,ln->jknm',Up,C0,Up)
-    # Compute the average norms of the basis functions involving each column of
-    # Up. First extract the diagonal norms:
-    avg_norms = np.einsum('ijij->ij',C0) 
-    # Get the averages:
-    avg_norms = np.sqrt(np.mean(avg_norms,axis=1))
+    # Compute C0 matrix of left basis:
+    C0 = C0[:,0,:,0]
+    # Compute the square norms of the interfaces:
+    inorms = np.dot(Up.transpose(),np.dot(C0,Up))
+    inorms = np.diag(inorms) 
     # Divide the columns of Up:
-    Up /= avg_norms
+    Up /= np.sqrt(inorms)
     return Up

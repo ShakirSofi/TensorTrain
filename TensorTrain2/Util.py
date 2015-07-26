@@ -1,5 +1,5 @@
 import numpy as np
-import scipy.linalg as scl
+import numpy.linalg as npl
 import scipy.special as scs
 import matplotlib.pyplot as plt
 
@@ -146,31 +146,38 @@ def Diagonalize(reader,tau,M):
 
 ''' Analysis functions:'''
 
-def LeastSquaresTest(C0,shapes,Up):
+def LeastSquaresTest(C,shapes,Up):
     ''' Computes a least-squares approximation of the interface functions in
     terms of the previous interface, to measure the contribution of a single 
     coordinate.
     
     Parameters:
     -----------
-    C0: ndarray, instantaneous correlation matrix of full 4-fold product basis.
+    C: ndarray, instantaneous correlation matrix of full 4-fold product basis.
     shapes: tuple, with four entries, the dimensions of the bases in C0.
     Up: ndaray, the interfaces to be approximated.
     '''
-    # Reshape Up:
-    C0 = np.reshape(C0,shapes+shapes)
+    # Reshape C0:
+    C = np.reshape(C,shapes+shapes)
     # Extract the part of C0 that contains only the first two basis sets:
-    C0 = C0[:,:,0,0,:,:,0,0]
+    C = C[:,:,0,0,:,:,0,0].copy()
     # Compute the least-squares matrix:
-    A = C0[:,0,:,0]
+    A = C[:,0,:,0].copy()
     # Compute the vector of right-hand sides:
-    B = C0[:,0,:,:].copy()
+    B = C[:,0,:,:].copy()
     B = np.reshape(B,(shapes[0],shapes[0]*shapes[1]))
     b = np.dot(B,Up)
     # Solve least-squares problems:
-    _,res,_,_ = scl.lstsq(A,b)
+    c = npl.solve(A, b)
+    # Compute the residuals:
+    res = np.zeros(b.shape[1]-1)
+    for kp in range(1,b.shape[1]):
+        res[kp-1] = 1 - 2*np.dot(c[:,kp],b[:,kp]) + np.dot(c[:,kp],np.dot(A,c[:,kp]))
     # Sum up the residuals and return them:
-    return np.sum(res)
+    if res.shape[0] > 0:
+        return np.mean(res)
+    else:
+        return 0.0
     
 
 def EvalEigenfunctions(T,tau,filename):
