@@ -52,6 +52,8 @@ def LowRank(eigv,sp,tp,A):
             break
         else:
             print "Result insufficient. Increasing rank."
+            print "Objective needed: %.5f"%(A.tol*A.Lref)
+            print "Result: %.5f"%L
             r += 1
         if r > rmax:
             print "Optimization failed, maximum rank reached."

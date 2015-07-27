@@ -234,7 +234,8 @@ def CreateEVHistogram(ev_traj,bins,filename,m=np.array([1]),rg=None,kb=8.314e-3,
         # Stack all data on top of each other:
         for m in range(ntraj):
             psi = np.vstack((psi,psidata[m]))
-        # Show the histogram:   
+        # Show the histogram:
+        plt.figure()   
         plt.hist(psi,bins=bins,range=rg)
     elif m.shape[0]==2:
         psidata = ef.get_output(dimensions=m)
@@ -242,7 +243,8 @@ def CreateEVHistogram(ev_traj,bins,filename,m=np.array([1]),rg=None,kb=8.314e-3,
         # Stack all data on top of each other:
         for m in range(ntraj):
             psi = np.vstack((psi,psidata[m]))
-        # Show the histogram:   
+        # Show the histogram: 
+        plt.figure()  
         H,xe,ye = np.histogram2d(psi[:,0],psi[:,1],bins=bins,range=rg,normed=True)
         # Make it a free energy plot:
         binwx = xe[1]-xe[0]
@@ -261,7 +263,7 @@ def CreateEVHistogram(ev_traj,bins,filename,m=np.array([1]),rg=None,kb=8.314e-3,
     plt.savefig(filename)
     plt.show()
 
-def SaveEVFrames(traj_inp,dt,ev_traj,c,d,filename,topfile,nframes=1000):
+def SaveEVFrames(dt,ev_traj,c,d,traj_inp=None,filename=None,topfile=None,nframes=1000):
     ''' Save frames that correspond to eigenvector centers from md-trajectories
     to separate trajectory.
     
@@ -277,7 +279,7 @@ def SaveEVFrames(traj_inp,dt,ev_traj,c,d,filename,topfile,nframes=1000):
     nframes: int, number of frames per center and per trajectory.
     '''
     # Get the number of trajectories:
-    ntraj = len(traj_inp)
+    ntraj = len(ev_traj)
     # Get the number of centers and eigenfunctions:
     nc,M = c.shape
     # Create a reader of eigenfunction data:
@@ -285,12 +287,12 @@ def SaveEVFrames(traj_inp,dt,ev_traj,c,d,filename,topfile,nframes=1000):
     ef.chunksize = np.min(ef.trajectory_lengths())
     # Get the output into memory, leaving out the first ef:
     psidata = ef.get_output(dimensions=np.arange(1,M+1,dtype=int))
-    
+    cindices = []
     # Write out frames to a trajectory file:
     # Loop over the centers:
     for i in range(nc):
         # Create a list of possible frames:
-        indexes = []
+        indices = []
         # Loop over the trajectory files:
         for m in range(ntraj):
             # Get the data for this traj:
@@ -300,12 +302,16 @@ def SaveEVFrames(traj_inp,dt,ev_traj,c,d,filename,topfile,nframes=1000):
             # Make a random selection:
             mind = dt*np.random.choice(mind,(nframes,))
             # Put the information together:
-            mindexes = np.zeros((nframes,2),dtype=int)
-            mindexes[:,0] = m
-            mindexes[:,1] = mind
-            indexes.append(mindexes)
+            mindices = np.zeros((nframes,2),dtype=int)
+            mindices[:,0] = m
+            mindices[:,1] = mind
+            indices.append(mindices)
         # Save to traj:
-        pco.save_traj(traj_inp,indexes,outfile=filename+"Center%d.xtc"%i,topfile=topfile)
+        if not (traj_inp is None) and not (filename is None) and not (topfile is None):
+            pco.save_traj(traj_inp,indices,outfile=filename+"Center%d.xtc"%i,topfile=topfile)
+        cindices.append(indices)
+    return cindices
+        
         
 
 ''' Basis Set Definitions.'''
