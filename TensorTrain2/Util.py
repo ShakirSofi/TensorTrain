@@ -270,7 +270,7 @@ def CreateEVHistogram(ev_traj,bins,filename,m=np.array([1]),rg=None,kb=8.314e-3,
     plt.savefig(filename)
     plt.show()
 
-def SaveEVFrames(dt,ev_traj,c,d,traj_inp=None,filename=None,topfile=None,nframes=1000):
+def SaveEVFrames(dt,ev_traj,c,d,traj_inp=None,filename=None,topfile=None,nframes=None):
     ''' Save frames that correspond to eigenvector centers from md-trajectories
     to separate trajectory.
     
@@ -307,9 +307,12 @@ def SaveEVFrames(dt,ev_traj,c,d,traj_inp=None,filename=None,topfile=None,nframes
             # Get the admissible frames for this trajectory:
             mind = np.where(np.any(np.abs(mdata - c[i,:])<=d[i],axis=1))[0]
             # Make a random selection:
-            mind = dt*np.random.choice(mind,(nframes,))
+            if not (nframes is None):
+                mind = dt*np.random.choice(mind,(nframes,))
+            else:
+                mind = dt*mind
             # Put the information together:
-            mindices = np.zeros((nframes,2),dtype=int)
+            mindices = np.zeros((mind.shape[0],2),dtype=int)
             mindices[:,0] = m
             mindices[:,1] = mind
             indices.append(mindices)
