@@ -136,8 +136,8 @@ def ALSSweep(T,A):
         # Update the objective function:
         A.UpdateObjective(L)
         if k < T.d-1:
-            shapes = (T.R[k],T.basissize[k],T.basissize[k-1],T.R[k-2])
-            res = UT.LeastSquaresTest(eigv.cov,shapes,Up)
+            shapes = (T.basissize[k],T.R[k],T.R[k-2],T.basissize[k-1])
+            res = UT.LeastSquaresTest(eigv.cov,shapes,Up,backward=True)
             T.SetLSError(k,res)
         # Update component k:
         if k == T.d-1:

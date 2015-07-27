@@ -146,7 +146,7 @@ def Diagonalize(reader,tau,M):
 
 ''' Analysis functions:'''
 
-def LeastSquaresTest(C,shapes,Up):
+def LeastSquaresTest(C,shapes,Up,backward=False):
     ''' Computes a least-squares approximation of the interface functions in
     terms of the previous interface, to measure the contribution of a single 
     coordinate.
@@ -156,16 +156,23 @@ def LeastSquaresTest(C,shapes,Up):
     C: ndarray, instantaneous correlation matrix of full 4-fold product basis.
     shapes: tuple, with four entries, the dimensions of the bases in C0.
     Up: ndaray, the interfaces to be approximated.
+    backward: bool, indicates that this is on the backward sweep, changes the
+        order of indices in the arrays.
     '''
     # Reshape C0:
     C = np.reshape(C,shapes+shapes)
     # Extract the part of C0 that contains only the first two basis sets:
     C = C[:,:,0,0,:,:,0,0].copy()
-    # Compute the least-squares matrix:
-    A = C[:,0,:,0].copy()
-    # Compute the vector of right-hand sides:
-    B = C[:,0,:,:].copy()
-    B = np.reshape(B,(shapes[0],shapes[0]*shapes[1]))
+    if backward:
+        # Compute the least-squares matrix:
+        A = C[0,:,0,:].copy()
+        # Compute the vector of right-hand sides:
+        B = C[0,:,:,:].copy()
+        B = np.reshape(B,(shapes[1],shapes[0]*shapes[1]))
+    else:
+        A = C[:,0,:,0].copy()
+        B = C[:,0,:,:].copy()
+        B = np.reshape(B,(shapes[0],shapes[0]*shapes[1]))
     b = np.dot(B,Up)
     # Solve least-squares problems:
     c = npl.solve(A, b)
