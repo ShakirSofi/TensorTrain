@@ -18,10 +18,10 @@ def RunALS(T,A):
     
     '''
     print "Starting ALS."
-    # Initialize objective function:
-    J = 0
-    q = 0
+    # Get dimension:
+    d = T.d
     # Iterate:
+    q = 0
     while 1:
         print "-------------"
         print "Iteration %d"%q
@@ -33,12 +33,16 @@ def RunALS(T,A):
             print "Optimization failed."
             break
         # Check for convergence:
-        Jq = A.Objective()
-        if np.abs(Jq - J) < A.eps_iter:
-            break
-        else:
-            J = Jq
-            q += 1
+        Jfull = np.array(A.J)
+        if q > 0:
+            diffq = np.abs(Jfull[-2*(d-2):] - Jfull[-4*(d-2):-2*(d-2)])
+            if np.max(diffq) < A.eps_iter:
+                break
+            else:
+                print "Individual differences too large: %.5f"%np.max(diffq)
+                print "Continue with next Iteration"
+                print ""
+        q += 1
     # Return results:
     return (T,A)
 

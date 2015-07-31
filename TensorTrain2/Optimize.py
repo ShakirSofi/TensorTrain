@@ -68,9 +68,9 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M,gtol):
     C0 = np.reshape(C0,(sp,tp,sp,tp))
     if R > 1:
         # Define objective function:
-        f = ft.partial(Objective,Ctau=Ctau,C0=C0,sp=sp,tp=tp,R=R,M=M)
+        f = ft.partial(Objective,Ctau=Ctau.copy(),C0=C0.copy(),sp=sp,tp=tp,R=R,M=M)
         # Optimize:
-        res = sco.minimize(f,u0,method="CG",jac=True,tol=gtol)
+        res = sco.minimize(f,u0.copy(),method="CG",jac=True,tol=gtol)
         # Extract result and objective function:
         u = res.x
         L = res.fun
