@@ -1,17 +1,19 @@
 import numpy as np
+from pandas.core.common import _ABCGeneric
 import scipy.linalg as scl
 import scipy.optimize as sco
 
 import functools as ft
+import os
 
-import pyemma.util.linalg as pla
+import variational.solvers.direct as vsd
 
-def LowRank(eigv,sp,tp,A):
+def LowRank(eigv, rpm, n, tp, A):
     ''' Performs the actual low-rank decomposition step inside ALS.
     
     Parameters:
     ------------
-    eigv: pyemma-TICA object, result of the full four-fold optimization.
+    eigv: result of the full four-fold optimization.
     sp,tp: int, the dimensions of the two product bases that were used, needed
     for the reshape of the solution.
     A: ALS-object
@@ -21,16 +23,22 @@ def LowRank(eigv,sp,tp,A):
     Up: ndarray, shape(r_p-1*n,R), where R is the new rank.
     '''
     # Extract the correlation matrices and the full solution:
-    Upp = eigv.eigenvectors
-    C0 = eigv.cov
-    Ctau = eigv.cov_tau
+    Upp = eigv.V
+    C0 = eigv.C0
+    Ctau = eigv.Ct
+    # Compute the dimension of the first double-product basis:
+    sp = rpm * n
     # Extract objective function from full computation:
-    Lref = -np.sum(eigv.eigenvalues[:A.M])
+    Lref = -np.sum(eigv.d[:A.M])
     # Update the reference value in A:
     A.UpdateLref(Lref)
     # Reshape Upp and perform SVD:
-    Upp = np.reshape(Upp,(sp,tp*A.M))
-    V,_,_ = scl.svd(Upp)
+    #Upp = np.reshape(Upp, (sp, tp*A.M))
+    V = np.eye(sp, sp)
+    for i in range(1,rpm):
+        cx = V[:, i].copy()
+        V[:, i] = V[:, i*n].copy()
+        V[:, i*n] = cx
     # Try to optimize with increasing ranks:
     r = 1
     rmax = np.minimum(A.rmax,sp)
@@ -70,7 +78,7 @@ def Optimize(Up,Ctau,C0,sp,tp,R,M,gtol):
         # Define objective function:
         f = ft.partial(Objective,Ctau=Ctau.copy(),C0=C0.copy(),sp=sp,tp=tp,R=R,M=M)
         # Optimize:
-        res = sco.minimize(f,u0.copy(),method="CG",jac=True,tol=gtol)
+        res = sco.minimize(f, u0.copy(), method="CG", jac=True, tol=gtol)
         # Extract result and objective function:
         u = res.x
         L = res.fun
@@ -106,7 +114,7 @@ def Objective(u,Ctau,C0,sp,tp,R,M,return_grad=True):
     Ctaup = np.reshape(Ctaup,(R*tp,R*tp))
     C0p = np.reshape(C0p,(R*tp,R*tp))
     # Solve the optimization problem:
-    D,X = pla.eig_corr(C0p,Ctaup)
+    D,X = vsd.eig_corr(C0p.copy(), Ctaup.copy())
     # Check for failure of the problem:
     if (D is None) or (D.shape[0] < M):
         if D is None:
@@ -114,11 +122,11 @@ def Objective(u,Ctau,C0,sp,tp,R,M,return_grad=True):
         else:
             print "Warning: Only %d eigenvalues could be computed."%D.shape[0]
         L = 0
-        if R == 1 or return_grad==False:
+        if R == 1 or return_grad == False:
             return L
         else:
             grad = None
-            return (L,grad)
+            return (L, grad)
     else:
         # Compute the objective function:
         L = -np.sum(D[:M])
@@ -134,7 +142,7 @@ def Objective(u,Ctau,C0,sp,tp,R,M,return_grad=True):
             # Compute the final gradient by dot-product:
             grad = np.dot(g,J)
             grad = grad.flatten()
-            return (L,grad)
+            return (L, grad, Ctaup, C0p)
 
 def GradCMatrix(X,D,R,tp):
     '''

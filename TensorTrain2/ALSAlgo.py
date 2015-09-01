@@ -27,7 +27,7 @@ def RunALS(T,A):
         print "Iteration %d"%q
         print "-------------"
         # Perform one full sweep:
-        T,A = ALSSweep(T,A)
+        T, A = ALSSweep(T, A)
         # Check for early termination:
         if A.J == []:
             print "Optimization failed."
@@ -35,16 +35,16 @@ def RunALS(T,A):
         # Check for convergence:
         Jfull = np.array(A.J)
         if q > 0:
-            diffq = np.abs(Jfull[-2*(d-2):] - Jfull[-4*(d-2):-2*(d-2)])
-            if np.max(diffq) < A.eps_iter:
-                break
-            else:
-                print "Individual differences too large: %.5f"%np.max(diffq)
-                print "Continue with next Iteration"
-                print ""
+           diffq = np.abs(Jfull[-2*(d-2):] - Jfull[-4*(d-2):-2*(d-2)])
+           if np.max(diffq) < A.eps_iter:
+               break
+           else:
+               print "Individual differences too large: %.5f"%np.max(diffq)
+               print "Continue with next Iteration"
+               print ""
         q += 1
     # Return results:
-    return (T,A)
+    return (T, A)
 
 
 def ALSSweep(T,A):
@@ -75,12 +75,12 @@ def ALSSweep(T,A):
         eigv = UT.Diagonalize(Qk,A.tau,A.M)
         # Update reference timescales:
         print "Eigenvalues:"
-        print eigv.eigenvalues
+        print eigv.d
         # Update timescales:
-        A.UpdateTimescales(eigv.eigenvalues)
+        A.UpdateTimescales(eigv.d)
         # Perform low-rank decomposition:
         print "Computing low-rank decomposition:"
-        Up,L = OP.LowRank(eigv,Yk.dimension(),RIk.dimension(),A)
+        Up,L = OP.LowRank(eigv, Yk.dimension()/T.basissize[k], T.basissize[k], RIk.dimension(), A)
         # Stop the process if no low-rank decomposition was possible:
         if Up is None:
             A.J = []
@@ -89,10 +89,11 @@ def ALSSweep(T,A):
         T.R[k] = Up.shape[1]
         # Update the objective function:
         A.UpdateObjective(L)
+        print "Objective: %.9e"%A.Objective()
         # Update the least-squares errors:
         if k > 0:
             shapes = (T.R[k-1],T.basissize[k],T.basissize[k+1],T.R[k+1])
-            res = UT.LeastSquaresTest(eigv.cov,shapes,Up)
+            res = UT.LeastSquaresTest(eigv.C0,shapes,Up)
             T.SetLSError(k,res)
         # Update component k:
         if k == 0:
@@ -125,23 +126,24 @@ def ALSSweep(T,A):
         eigv = UT.Diagonalize(Qk,A.tau,A.M)
         # Update reference timescales:
         print "Eigenvalues:"
-        print eigv.eigenvalues
+        print eigv.d
         # Update timescales:
-        A.UpdateTimescales(eigv.eigenvalues)
+        A.UpdateTimescales(eigv.d)
         # Perform low-rank decomposition:
         print "Computing low-rank decomposition:"
-        Up,L = OP.LowRank(eigv,Yk.dimension(),RIk.dimension(),A)
+        Up,L = OP.LowRank(eigv, Yk.dimension()/T.basissize[k], T.basissize[k], RIk.dimension(), A)
         # Stop the process if no low-rank decomposition was possible:
         if Up is None:
             A.J = []
-            return (T,A) 
+            return (T,A)
         # Update the rank:
         T.R[k-1] = Up.shape[1]
         # Update the objective function:
         A.UpdateObjective(L)
+        print "Objective: %.9e"%A.Objective()
         if k < T.d-1:
             shapes = (T.basissize[k],T.R[k],T.R[k-2],T.basissize[k-1])
-            res = UT.LeastSquaresTest(eigv.cov,shapes,Up,backward=True)
+            res = UT.LeastSquaresTest(eigv.C0,shapes,Up,backward=True)
             T.SetLSError(k,res)
         # Update component k:
         if k == T.d-1:

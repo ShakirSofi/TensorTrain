@@ -4,24 +4,27 @@ import scipy.special as scs
 import matplotlib.pyplot as plt
 
 import pyemma.coordinates as pco
-from pyemma.coordinates.transform.tica import TICA
+
+import variational.estimators.lagged_correlation as vlc
+import variational.solvers.direct as vsd
 
 ''' Utility functions for TT-computations.'''
 
-def ApplyLinearTransform(Y,U,filename):
-    ''' Apply linear transformation U to time-series given by Y.
-    
+
+def ApplyLinearTransform(Y, U, filename):
+    """ Apply linear transformation U to time-series given by Y.
+
     Parameters:
     -------------
     Y, pyemma-reader, containing time series of basis functions.
     U, ndarray, shape (r,s), where r must be identical to dimension of Y and s
         is the number of linear combinations to be extracted.
     filename: str, name to be used to save the data for the new time series.
-    
+
     Returns:
     -------------
-    pyemma-reader, containing the time-series of all the linear transform 
-        applied to Y.'''
+    pyemma-reader, containing the time-series of all the linear transform
+        applied to Y."""
     # Get the dimension of the new time-series:
     r = U.shape[1]
     # Get the iterator for the time-series:
@@ -29,7 +32,7 @@ def ApplyLinearTransform(Y,U,filename):
     # Prepare an empty array for the trajectory pieces:
     file_names = []
     q = 0
-    ieval = np.zeros((0,r))
+    ieval = np.zeros((0, r))
     # Compute the products chunk by chunk:
     for piece in I:
         # Get the trajectory number and the data:
@@ -37,23 +40,24 @@ def ApplyLinearTransform(Y,U,filename):
         piece = piece[1]
         # Check if the last trajectory is finished:
         if traj_id > q:
-            np.save(filename + "_%d.npy"%q,ieval)
-            file_names.append(filename + "_%d.npy"%q)
-            ieval = np.zeros((0,r))
+            np.save(filename + "_%d.npy" % q, ieval)
+            file_names.append(filename + "_%d.npy" % q)
+            ieval = np.zeros((0, r))
             q += 1
         # Apply linear transform:
-        piece = np.dot(piece,U)
+        piece = np.dot(piece, U)
         # Stack the result underneath the previous results:
-        ieval = np.vstack((ieval,piece))
+        ieval = np.vstack((ieval, piece))
     # Save the last trajectory:
-    np.save(filename + "_%d.npy"%q,ieval)
-    file_names.append(filename + "_%d.npy"%q)
+    np.save(filename + "_%d.npy" % q, ieval)
+    file_names.append(filename + "_%d.npy" % q)
     # Build a new reader and return it:
     reader = pco.source(file_names)
     reader.chunksize = Y.chunksize
     return reader
 
-def DoubleProducts(Y1,Y2,filename,U=None):
+
+def DoubleProducts(Y1, Y2, filename, U=None):
     ''' Evaluate all products between two given time-series. Optionally,a
     linear transformation of the product basis can be computed instead.
     
@@ -72,7 +76,7 @@ def DoubleProducts(Y1,Y2,filename,U=None):
     r1 = Y1.dimension()
     r2 = Y2.dimension()
     # Compute the product dimension:
-    r = r1*r2
+    r = r1 * r2
     # Get the output dimension:
     if not (U is None):
         ro = U.shape[1]
@@ -84,39 +88,56 @@ def DoubleProducts(Y1,Y2,filename,U=None):
     # Prepare an empty array for the trajectory pieces:
     file_names = []
     q = 0
-    ieval = np.zeros((0,ro))
+    ieval = np.zeros((0, ro))
     # Compute the products chunk by chunk:
-    for piece in zip(I1,I2):
+    for piece in zip(I1, I2):
         # Get the trajectory number and the data:
         traj_id = piece[0][0]
         piece0 = piece[0][1]
         piece1 = piece[1][1]
         # Check if the last trajectory is finished:
         if traj_id > q:
-            np.save(filename + "_%d.npy"%q,ieval)
-            file_names.append(filename + "_%d.npy"%q)
-            ieval = np.zeros((0,ro))
+            np.save(filename + "_%d.npy" % q, ieval)
+            file_names.append(filename + "_%d.npy" % q)
+            ieval = np.zeros((0, ro))
             q += 1
         # Compute all the products:
-        chunkeval = np.einsum('ijk,imk->ijm',piece0[:,:,np.newaxis],piece1[:,:,np.newaxis])
-        chunkeval = np.reshape(chunkeval,(chunkeval.shape[0],r))
+        chunkeval = np.einsum('ijk,imk->ijm', piece0[:, :, np.newaxis], piece1[:, :, np.newaxis])
+        chunkeval = np.reshape(chunkeval, (chunkeval.shape[0], r))
         # Apply linear transform if necessary:
         if not (U is None):
-            chunkeval = np.dot(chunkeval,U)
+            chunkeval = np.dot(chunkeval, U)
         # Stack the result underneath the previous results:
-        ieval = np.vstack((ieval,chunkeval))
+        ieval = np.vstack((ieval, chunkeval))
     # Save the last trajectory:
-    np.save(filename + "_%d.npy"%q,ieval)
-    file_names.append(filename + "_%d.npy"%q)
+    np.save(filename + "_%d.npy" % q, ieval)
+    file_names.append(filename + "_%d.npy" % q)
     # Build a new reader and return it:
     reader = pco.source(file_names)
     reader.chunksize = Y1.chunksize
     return reader
-                    
 
 
- 
-def Diagonalize(reader,tau,M):
+class DiagonalizationResult:
+    """ This class is just a container for the results of a diagonalization problem.
+
+    Parameters:
+    -----------
+    d: ndarray (M,)
+        the eigenvalues computed.
+    V: ndarray (N,M)
+        the eigenvectors computed.
+    Ct, C0: ndarray (N,N)
+        the correlation matrices.
+    """
+    def __init__(self,d, V, Ct, C0):
+        self.d = d
+        self.V = V
+        self.Ct = Ct
+        self.C0 = C0
+
+
+def Diagonalize(reader, tau, M):
     ''' Diagonalizes the generalized eigenvalue problem for the time-series re-
     presented by reader.
       
@@ -130,23 +151,34 @@ def Diagonalize(reader,tau,M):
     -----------
     pyemma-TICA-object, from which all important information can be extracted.
     '''
-    # Check if the dimension of the data is smaller than M:
-    M = np.minimum(M,reader.dimension())
-    # Instantiate TICA-object. It is important to set mean=0 here, otherwise the
-    # mean would be substracted from the time-series.
-    tica = TICA(tau,M,epsilon=1e-14,mean=0)
-    # Construct the stages of the pipeline:
-    stages = [reader,tica]
-    # Run the pipeline:
-    pco.pipeline(stages)
-    # Restrict the eigenvalue and eigenvectors to the requested number.
-    tica.eigenvalues = tica.eigenvalues[:M]
-    tica.eigenvectors = tica.eigenvectors[:,:M]
-    return tica
+    # Get output from the reader:
+    out = reader.get_output()
+    # Determine number of trajectories:
+    ntraj = reader.number_of_trajectories()
+    # Determine number of basis functions:
+    nd = reader.dimension()
+    # Instantiate estimator object:
+    est = vlc.LaggedCorrelation(nd, tau)
+    # Add all trajectories:
+    for n in range(ntraj):
+        est.add(out[n])
+    # Get correlation matrices:
+    Ct = est.GetCt()
+    C0 = est.GetC0()
+    # Plug them into estimator:
+    d, V = vsd.eig_corr(C0, Ct)
+    # Select only the first M eigenvalue / eigenvector pairs:
+    d = d[:M]
+    V = V[:,:M]
+    # Return results:
+    eigv = DiagonalizationResult(d,V,Ct,C0)
+    return eigv
+
 
 ''' Analysis functions:'''
 
-def LeastSquaresTest(C,shapes,Up,backward=False):
+
+def LeastSquaresTest(C, shapes, Up, backward=False):
     ''' Computes a least-squares approximation of the interface functions in
     terms of the previous interface, to measure the contribution of a single 
     coordinate.
@@ -160,34 +192,34 @@ def LeastSquaresTest(C,shapes,Up,backward=False):
         order of indices in the arrays.
     '''
     # Reshape C0:
-    C = np.reshape(C,shapes+shapes)
+    C = np.reshape(C, shapes + shapes)
     # Extract the part of C0 that contains only the first two basis sets:
-    C = C[:,:,0,0,:,:,0,0].copy()
+    C = C[:, :, 0, 0, :, :, 0, 0].copy()
     if backward:
         # Compute the least-squares matrix:
-        A = C[0,:,0,:].copy()
+        A = C[0, :, 0, :].copy()
         # Compute the vector of right-hand sides:
-        B = C[0,:,:,:].copy()
-        B = np.reshape(B,(shapes[1],shapes[0]*shapes[1]))
+        B = C[0, :, :, :].copy()
+        B = np.reshape(B, (shapes[1], shapes[0] * shapes[1]))
     else:
-        A = C[:,0,:,0].copy()
-        B = C[:,0,:,:].copy()
-        B = np.reshape(B,(shapes[0],shapes[0]*shapes[1]))
-    b = np.dot(B,Up)
+        A = C[:, 0, :, 0].copy()
+        B = C[:, 0, :, :].copy()
+        B = np.reshape(B, (shapes[0], shapes[0] * shapes[1]))
+    b = np.dot(B, Up)
     # Solve least-squares problems:
     c = npl.solve(A, b)
     # Compute the residuals:
-    res = np.zeros(b.shape[1]-1)
-    for kp in range(1,b.shape[1]):
-        res[kp-1] = 1 - 2*np.dot(c[:,kp],b[:,kp]) + np.dot(c[:,kp],np.dot(A,c[:,kp]))
+    res = np.zeros(b.shape[1] - 1)
+    for kp in range(1, b.shape[1]):
+        res[kp - 1] = 1 - 2 * np.dot(c[:, kp], b[:, kp]) + np.dot(c[:, kp], np.dot(A, c[:, kp]))
     # Sum up the residuals and return them:
     if res.shape[0] > 0:
         return np.mean(res)
     else:
         return 0.0
-    
 
-def EvalEigenfunctions(T,tau,filename):
+
+def EvalEigenfunctions(T, tau, filename):
     ''' Evaluates the eigenfunctions of a TT-tensor and saves the results.
     
     Parameters:
@@ -203,22 +235,23 @@ def EvalEigenfunctions(T,tau,filename):
     # Get the right interface:
     Rk = T.GetInterface(k)
     # Get the left interface:
-    Lk = T.GetInterface(k-1)
+    Lk = T.GetInterface(k - 1)
     # Transform:
-    Ukm = T.ComponentTensor(k-1,order=1)
+    Ukm = T.ComponentTensor(k - 1, order=1)
     # Apply it:
-    Lk = ApplyLinearTransform(Lk,Ukm,filename)
+    Lk = ApplyLinearTransform(Lk, Ukm, filename)
     # Compute the double products with Rk:
-    Rk = DoubleProducts(Lk,Rk,filename)
+    Rk = DoubleProducts(Lk, Rk, filename)
     # Diagonalize:
-    eigv = Diagonalize(Rk,tau,T.M)
+    eigv = Diagonalize(Rk, tau, T.M)
     # Get the eigenvectors:
-    V = eigv.eigenvectors
+    V = eigv.V
     # Multiply:
-    Yk = ApplyLinearTransform(Rk,V,filename)
+    Yk = ApplyLinearTransform(Rk, V, filename)
     return Yk
 
-def CreateEVHistogram(ev_traj,bins,filename,m=np.array([1]),rg=None,kb=8.314e-3,T=300):
+
+def CreateEVHistogram(ev_traj, bins, filename, m=np.array([1]), rg=None, kb=8.314e-3, T=300):
     ''' Create a histogram of the eigenfunction.
     
     Parameters:
@@ -235,42 +268,43 @@ def CreateEVHistogram(ev_traj,bins,filename,m=np.array([1]),rg=None,kb=8.314e-3,
     ef = pco.source(ev_traj)
     ef.chunksize = np.min(ef.trajectory_lengths())
     # Create the histogram depending on m:
-    if m.shape[0]==1:
+    if m.shape[0] == 1:
         psidata = ef.get_output(dimensions=m)
-        psi = np.zeros((0,1))
+        psi = np.zeros((0, 1))
         # Stack all data on top of each other:
         for m in range(ntraj):
-            psi = np.vstack((psi,psidata[m]))
+            psi = np.vstack((psi, psidata[m]))
         # Show the histogram:
-        plt.figure()   
-        plt.hist(psi,bins=bins,range=rg)
-    elif m.shape[0]==2:
+        plt.figure()
+        plt.hist(psi, bins=bins, range=rg)
+    elif m.shape[0] == 2:
         psidata = ef.get_output(dimensions=m)
-        psi = np.zeros((0,2))
+        psi = np.zeros((0, 2))
         # Stack all data on top of each other:
         for m in range(ntraj):
-            psi = np.vstack((psi,psidata[m]))
+            psi = np.vstack((psi, psidata[m]))
         # Show the histogram: 
-        plt.figure()  
-        H,xe,ye = np.histogram2d(psi[:,0],psi[:,1],bins=bins,range=rg,normed=True)
+        plt.figure()
+        H, xe, ye = np.histogram2d(psi[:, 0], psi[:, 1], bins=bins, range=rg, normed=True)
         # Make it a free energy plot:
-        binwx = xe[1]-xe[0]
-        binwy = ye[1]-ye[0]
-        H = H*binwx*binwy
+        binwx = xe[1] - xe[0]
+        binwy = ye[1] - ye[0]
+        H = H * binwx * binwy
         ind = np.nonzero(H)
-        thres = np.min(H[ind[0],ind[1]])
-        H2 = thres*np.ones(H.shape)
-        H2[ind[0],ind[1]] = H[ind[0],ind[1]]
-        H2 = -kb*T*np.log(H2)
-        X,Y = np.meshgrid(0.5*(xe[1:]+xe[:-1]),0.5*(ye[1:]+ye[:-1]))
-        plt.contourf(X,Y,H2.transpose())
+        thres = np.min(H[ind[0], ind[1]])
+        H2 = thres * np.ones(H.shape)
+        H2[ind[0], ind[1]] = H[ind[0], ind[1]]
+        H2 = -kb * T * np.log(H2)
+        X, Y = np.meshgrid(0.5 * (xe[1:] + xe[:-1]), 0.5 * (ye[1:] + ye[:-1]))
+        plt.contourf(X, Y, H2.transpose())
         plt.colorbar()
     else:
         print "Selection in m could not be used."
     plt.savefig(filename)
     plt.show()
 
-def SaveEVFrames(dt,ev_traj,c,d,traj_inp=None,filename=None,topfile=None,nframes=None):
+
+def SaveEVFrames(dt, ev_traj, c, d, traj_inp=None, filename=None, topfile=None, nframes=None):
     ''' Save frames that correspond to eigenvector centers from md-trajectories
     to separate trajectory.
     
@@ -288,12 +322,12 @@ def SaveEVFrames(dt,ev_traj,c,d,traj_inp=None,filename=None,topfile=None,nframes
     # Get the number of trajectories:
     ntraj = len(ev_traj)
     # Get the number of centers and eigenfunctions:
-    nc,M = c.shape
+    nc, M = c.shape
     # Create a reader of eigenfunction data:
     ef = pco.source(ev_traj)
     ef.chunksize = np.min(ef.trajectory_lengths())
     # Get the output into memory, leaving out the first ef:
-    psidata = ef.get_output(dimensions=np.arange(1,M+1,dtype=int))
+    psidata = ef.get_output(dimensions=np.arange(1, M + 1, dtype=int))
     cindices = []
     # Write out frames to a trajectory file:
     # Loop over the centers:
@@ -305,29 +339,28 @@ def SaveEVFrames(dt,ev_traj,c,d,traj_inp=None,filename=None,topfile=None,nframes
             # Get the data for this traj:
             mdata = psidata[m]
             # Get the admissible frames for this trajectory:
-            mind = np.where(np.any(np.abs(mdata - c[i,:])<=d[i],axis=1))[0]
+            mind = np.where(np.any(np.abs(mdata - c[i, :]) <= d[i], axis=1))[0]
             # Make a random selection:
             if not (nframes is None):
-                mind = dt*np.random.choice(mind,(nframes,))
+                mind = dt * np.random.choice(mind, (nframes,))
             else:
-                mind = dt*mind
+                mind = dt * mind
             # Put the information together:
-            mindices = np.zeros((mind.shape[0],2),dtype=int)
-            mindices[:,0] = m
-            mindices[:,1] = mind
+            mindices = np.zeros((mind.shape[0], 2), dtype=int)
+            mindices[:, 0] = m
+            mindices[:, 1] = mind
             indices.append(mindices)
         # Save to traj:
         if not (traj_inp is None) and not (filename is None) and not (topfile is None):
-            pco.save_traj(traj_inp,indices,outfile=filename+"Center%d.xtc"%i,topfile=topfile)
+            pco.save_traj(traj_inp, indices, outfile=filename + "Center%d.xtc" % i, topfile=topfile)
         cindices.append(indices)
     return cindices
-        
-        
+
 
 ''' Basis Set Definitions.'''
 
 
-def EvalGaussian(x,mu,sig):
+def EvalGaussian(x, mu, sig):
     ''' Evaluates Gaussian basis function over data x.
     
     Parameters:
@@ -344,13 +377,14 @@ def EvalGaussian(x,mu,sig):
     # Get the size of the data:
     T = x.shape[0]
     # Prepare output:
-    y = np.zeros((T,N))
+    y = np.zeros((T, N))
     # Evaluate the functions one by one:
     for n in range(N):
-        y[:,n] = (1.0/(np.sqrt(2*np.pi)*sig[n]))*np.exp(-(x - mu[n])**2/(2*sig[n]**2))
+        y[:, n] = (1.0 / (np.sqrt(2 * np.pi) * sig[n])) * np.exp(-(x - mu[n]) ** 2 / (2 * sig[n] ** 2))
     return y
 
-def EvalGaussianAngle(phi,mu,sig,normalized=False):
+
+def EvalGaussianAngle(phi, mu, sig, normalized=False):
     ''' Evaluates a Gaussian basis function on 2pi-peridic domain. The input
     angles are transformed to their sin/cos-coordinates first.
      
@@ -369,26 +403,27 @@ def EvalGaussianAngle(phi,mu,sig,normalized=False):
     # Get the size of the data:
     T = phi.shape[0]
     # Prepare output:
-    y = np.zeros((T,N))
+    y = np.zeros((T, N))
     # Transform the array:
-    x = np.zeros((T,2))
-    x[:,0] = np.cos(phi)
-    x[:,1] = np.sin(phi)
+    x = np.zeros((T, 2))
+    x[:, 0] = np.cos(phi)
+    x[:, 1] = np.sin(phi)
     # Also transform mu and sig:
-    mu = np.array([np.cos(mu),np.sin(mu)])
+    mu = np.array([np.cos(mu), np.sin(mu)])
     mu = mu.transpose()
     # Evaluate the Gaussians one by one_:
     for n in range(N):
-        xn = x - mu[n,:]
-        nsig = (1.0/sig[n])*np.eye(2)
-        nyvec = np.einsum('ij,ji->i',xn,np.dot(nsig,xn.transpose()))
+        xn = x - mu[n, :]
+        nsig = (1.0 / sig[n]) * np.eye(2)
+        nyvec = np.einsum('ij,ji->i', xn, np.dot(nsig, xn.transpose()))
         if normalized:
-            y[:,n] = (1.0/(2*np.pi*sig[n]))*np.exp(-0.5*nyvec)
+            y[:, n] = (1.0 / (2 * np.pi * sig[n])) * np.exp(-0.5 * nyvec)
         else:
-            y[:,n] = np.exp(-0.5*nyvec)
+            y[:, n] = np.exp(-0.5 * nyvec)
     return y
 
-def EvalFourier(x,M,normalized=False):
+
+def EvalFourier(x, M, normalized=False):
     ''' Evaluates all real Fourier basis functions up to order M over 1-d-array
     x.
     
@@ -405,23 +440,24 @@ def EvalFourier(x,M,normalized=False):
     '''
     # Determine pre-factors:
     if normalized:
-        n0 = 1.0/np.sqrt(2*np.pi)
-        n1 = 1.0/np.sqrt(np.pi)
+        n0 = 1.0 / np.sqrt(2 * np.pi)
+        n1 = 1.0 / np.sqrt(np.pi)
     else:
         n0 = 1
         n1 = 1
     # Get the data size:
     T = x.shape[0]
     # Prepare output:
-    y = np.zeros((T,2*M+1))
+    y = np.zeros((T, 2 * M + 1))
     # Evaluate:
-    y[:,0] = n0
-    for m in range(1,M+1):
-        y[:,2*m-1] = n1*np.sin(m*x)
-        y[:,2*m] = n1*np.cos(m*x)
+    y[:, 0] = n0
+    for m in range(1, M + 1):
+        y[:, 2 * m - 1] = n1 * np.sin(m * x)
+        y[:, 2 * m] = n1 * np.cos(m * x)
     return y
 
-def EvalLegendre(x,M):
+
+def EvalLegendre(x, M):
     ''' Evaluates all Legendre polynomials up to order M over 1-d-array x.
     
     Parameters:
@@ -435,11 +471,11 @@ def EvalLegendre(x,M):
     '''
     # Create output:
     T = x.shape[0]
-    y = np.zeros((T,M+1))
+    y = np.zeros((T, M + 1))
     # Evaluate the polynomials sequentially:
-    for m in range(M+1):
+    for m in range(M + 1):
         # Get the coefficients:
         p = scs.legendre(m)
         # Evaluate:
-        y[:,m] = np.polyval(p,x)
+        y[:, m] = np.polyval(p, x)
     return y
