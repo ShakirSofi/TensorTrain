@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 import pyemma.coordinates as pco
 
-import variational.estimators.lagged_correlation as vlc
 import variational.solvers.direct as vsd
+import variational.estimators.running_moments as vrm
 
 ''' Utility functions for TT-computations.'''
 
@@ -158,20 +158,23 @@ def Diagonalize(reader, tau, M):
     # Determine number of basis functions:
     nd = reader.dimension()
     # Instantiate estimator object:
-    est = vlc.LaggedCorrelation(nd, tau)
+    est = vrm.running_covar(xx=True, xy=True, symmetrize=True, sparse_mode='dense')
     # Add all trajectories:
     for n in range(ntraj):
-        est.add(out[n])
+        # Extract the next trajectory:
+        ntraj = out[n]
+        # Add to estimator:
+        est.add(ntraj[:-tau, :], ntraj[tau:, :])
     # Get correlation matrices:
-    Ct = est.GetCt()
-    C0 = est.GetC0()
+    Ct = est.cov_XY()
+    C0 = est.cov_XX()
     # Plug them into estimator:
-    d, V = vsd.eig_corr(C0, Ct)
+    d, V = vsd.eig_corr_qr(C0, Ct)
     # Select only the first M eigenvalue / eigenvector pairs:
     d = d[:M]
-    V = V[:,:M]
+    V = V[:, :M]
     # Return results:
-    eigv = DiagonalizationResult(d,V,Ct,C0)
+    eigv = DiagonalizationResult(d, V, Ct, C0)
     return eigv
 
 
